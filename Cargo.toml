@@ -1,0 +1,16 @@
+[workspace]
+members = ["async-gen-macros"]
+
+[package]
+name = "async-gen"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+async-gen-macros = { path = "./async-gen-macros" }
+futures-core = "0.3"
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+futures-util = "0.3"
+tokio = { version = "1", features = ["full"] }
