@@ -40,6 +40,14 @@ pub struct Yield<Y> {
 
 impl<Y> Yield<Y> {
     pub fn yield_(&mut self, val: Y) -> impl Future + '_ {
+        // SEAFTY: this function is marked with `&mut self`
+        //
+        // And `Yield<()>` can't escape from async body:
+        //
+        // AsyncGen::new(|y: Yield<()>| async {
+        //     // `y` can't escape from this closure.
+        //     return (y, ());
+        // });
         *unsafe { &mut *self.inner.data.get() } = Some(val);
         std::future::poll_fn(|_| {
             if unsafe { &*self.inner.data.get() }.is_some() {
@@ -78,6 +86,8 @@ where
         match me.fut.poll(cx) {
             Poll::Ready((_, val)) => Poll::Ready(GeneratorState::Complete(val)),
             Poll::Pending => {
+                // SEAFTY: We just return from `me.fut`,
+                // So It's safe to access `me.inner.data`
                 if let Some(val) = unsafe { &mut *me.inner.data.get() }.take() {
                     return Poll::Ready(GeneratorState::Yielded(val));
                 }
