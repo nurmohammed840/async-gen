@@ -3,12 +3,12 @@ use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use syn::{
     parse::{Parse, ParseStream},
     visit_mut::VisitMut,
-    Expr, ExprAsync, Result,
+    Block, Expr, Result, Stmt,
 };
 
 struct CodeBlock {
     crate_path: TokenStream2,
-    async_block: ExprAsync,
+    stmts: Vec<Stmt>,
 }
 
 impl Parse for CodeBlock {
@@ -19,14 +19,14 @@ impl Parse for CodeBlock {
         };
         Ok(CodeBlock {
             crate_path,
-            async_block: input.parse()?,
+            stmts: input.call(Block::parse_within)?,
         })
     }
 }
 
-#[derive(Default)]
 struct EditCodeBlock {
     has_yielded: bool,
+    unit: Box<syn::Expr>,
 }
 
 impl VisitMut for EditCodeBlock {
@@ -35,7 +35,7 @@ impl VisitMut for EditCodeBlock {
             syn::Expr::Yield(yield_expr) => {
                 self.has_yielded = true;
                 // syn::visit_mut::visit_expr_yield_mut(self, yield_expr);
-                let value_expr = &yield_expr.expr;
+                let value_expr = yield_expr.expr.as_ref().unwrap_or(&self.unit);
                 *i = syn::parse_quote! { __yield.yield_(#value_expr).await };
             }
             _ => syn::visit_mut::visit_expr_mut(self, i),
@@ -49,7 +49,6 @@ impl VisitMut for EditCodeBlock {
     //     }
     //     let out = &mut mac.tokens;
     //     let tokens = std::mem::replace(out, TokenStream2::new());
-
     //     let mut tts = tokens.into_iter();
     //     while let Some(tt) = tts.next() {
     //         match tt {
@@ -73,20 +72,20 @@ impl VisitMut for EditCodeBlock {
 pub fn gen_inner(input: TokenStream) -> TokenStream {
     let CodeBlock {
         crate_path,
-        mut async_block,
+        mut stmts,
     } = syn::parse_macro_input!(input);
 
-    let mut edit = EditCodeBlock::default();
-    edit.visit_block_mut(&mut async_block.block);
-
-    let ret_ty = (!edit.has_yielded).then_some(quote::quote! { ::<(), _> });
-    let async_token = async_block.async_token;
-    let move_token = async_block.capture;
-    let async_block = async_block.block;
-
+    let mut edit = EditCodeBlock {
+        has_yielded: false,
+        unit: syn::parse_quote!(()),
+    };
+    for stmt in &mut stmts {
+        edit.visit_stmt_mut(stmt);
+    }
+    let _ty = (!edit.has_yielded).then_some(quote::quote! { ::<(),_, _> });
     let tokens = quote::quote! {
-        #crate_path::AsyncGen #ret_ty ::new(|mut __yield| async #move_token {
-            let __body = #async_token #async_block  .await;
+        #crate_path::gen #_ty (|mut __yield| async {
+            let __body = async { #(#stmts)* }.await;
             return (__yield, __body);
         })
     };

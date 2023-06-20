@@ -1,50 +1,29 @@
+This library provides a way to create asynchronous generator using the `async/await` feature in stable Rust.
+
+# Installation
+
+Add it as a dependency to your Rust project by adding the following line to your `Cargo.toml` file:
+
+
+```toml
+[dependencies]
+async-gen = "0.1"
+```
+
 # Examples
 
 ```rust
-use async_gen::{gen, GeneratorState};
 use std::pin::pin;
+use async_gen::{gen, GeneratorState};
 
 #[tokio::main]
 async fn main() {
-    let gen = gen!(async {
-        for i in 0..2 {
-            yield i;
-        }
-        return "Done";
-    });
-    let mut gen = pin!(gen);
-    assert_eq!(gen.resume().await, GeneratorState::Yielded(0));
-    assert_eq!(gen.resume().await, GeneratorState::Yielded(1));
-    assert_eq!(gen.resume().await, GeneratorState::Complete("Done"));
-}
-```
-
-Here is the same example without using the `gen!` macro.
-
-```rust
-use async_gen::{AsyncGen, AsyncGenerator};
-
-fn without_macro() -> impl AsyncGenerator {
-    AsyncGen::new(|mut c| async {
-        for i in 0..2 {
-            c.yield_(i).await;
-        }
-        return (c, "Done");
-    })
-}
-```
-
-Here is an example of asynchronous generator that yields numbers from `0` to `9`
-
-```rust
-use async_gen::{futures_core::Stream, gen};
-
-fn numbers() -> impl Stream<Item = i32> {
-    let gen = gen!(async {
-        for i in 0..10 {
-            yield i;
-        }
-    });
-    gen.into_stream()
+    let g = gen! {
+        yield 42;
+        return "foo"
+    };
+    let mut g = pin!(g);
+    assert_eq!(g.resume().await, GeneratorState::Yielded(42));
+    assert_eq!(g.resume().await, GeneratorState::Complete("foo"));
 }
 ```

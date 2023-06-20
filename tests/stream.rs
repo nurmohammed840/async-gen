@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn noop_stream() {
-    let mut gen = pin!(gen!(async {}));
+    let mut gen = pin!(gen! {});
     assert_eq!(gen.resume().await, GeneratorState::Complete(()));
 }
 
@@ -15,10 +15,10 @@ async fn empty_stream() {
     let mut ran = false;
     {
         let r = &mut ran;
-        let mut gen = pin!(gen!(async {
+        let mut gen = pin!(gen! {
             *r = true;
             println!("hello world!");
-        }));
+        });
         assert_eq!(gen.resume().await, GeneratorState::Complete(()));
     }
     assert!(ran);
@@ -26,20 +26,20 @@ async fn empty_stream() {
 
 #[tokio::test]
 async fn yield_single_value() {
-    let mut s = pin!(gen!(async {
+    let mut s = pin!(gen! {
         yield "hello";
-    }));
+    });
     assert_eq!(s.resume().await, GeneratorState::Yielded("hello"));
     assert_eq!(s.resume().await, GeneratorState::Complete(()));
 }
 
 #[tokio::test]
 async fn yield_multi_value() {
-    let mut s = pin!(gen!(async {
+    let mut s = pin!(gen! {
         yield "hello";
         yield "world";
         yield "dizzy";
-    }));
+    });
     assert_eq!(s.resume().await, GeneratorState::Yielded("hello"));
     assert_eq!(s.resume().await, GeneratorState::Yielded("world"));
     assert_eq!(s.resume().await, GeneratorState::Yielded("dizzy"));
@@ -49,12 +49,12 @@ async fn yield_multi_value() {
 #[tokio::test]
 async fn return_stream() {
     fn build_stream() -> impl Stream<Item = i32> {
-        gen!(async {
+        gen! {
             yield 1;
             yield 2;
             yield 3;
-        })
-        .into_stream()
+        }
+        .into_async_iter()
     }
     let s = build_stream();
 
@@ -68,12 +68,12 @@ async fn return_stream() {
 #[tokio::test]
 async fn consume_channel() {
     let (tx, mut rx) = mpsc::channel(10);
-    let s = gen!(async {
+    let s = gen! {
         while let Some(v) = rx.recv().await {
             yield v;
         }
-    });
-    let mut s = pin!(s.into_stream());
+    };
+    let mut s = pin!(s.into_async_iter());
     for i in 0..3 {
         assert!(tx.send(i).await.is_ok());
         assert_eq!(Some(i), s.next().await);
@@ -88,10 +88,10 @@ async fn borrow_self() {
 
     impl Data {
         fn stream<'a>(&'a self) -> impl Stream<Item = &str> + 'a {
-            gen!(async {
+            gen! {
                 yield &self.0[..];
-            })
-            .into_stream()
+            }
+            .into_async_iter()
         }
     }
 
@@ -102,32 +102,33 @@ async fn borrow_self() {
 
 #[tokio::test]
 async fn stream_in_stream() {
-    let s = gen!(async {
-        let g = gen!(async {
+    let s = gen! {
+        let g = gen! {
             for i in 0..3 {
                 yield i;
             }
-        });
-        let mut s = pin!(g.into_stream());
+        };
+        let mut s = pin!(g.into_async_iter());
         while let Some(v) = s.next().await {
             yield v;
         }
-    });
-    let values: Vec<_> = s.into_stream().collect().await;
+    };
+    let values: Vec<_> = s.into_async_iter().collect().await;
     assert_eq!(3, values.len());
 }
 
 #[tokio::test]
 async fn yield_non_unpin_value() {
-    let s: Vec<_> = gen!(async {
+    let s: Vec<_> = gen! {
         for i in 0..3 {
             yield async move { i };
         }
-    })
-    .into_stream()
+    }
+    .into_async_iter()
     .buffered(1)
     .collect()
     .await;
+
     assert_eq!(s, vec![0, 1, 2]);
 }
 
