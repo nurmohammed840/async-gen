@@ -42,7 +42,7 @@ impl<Y> Yield<Y> {
     pub fn yield_(&mut self, val: Y) -> impl Future + '_ {
         *unsafe { &mut *self.inner.data.get() } = Some(val);
         std::future::poll_fn(|_| {
-            if let Some(_) = unsafe { &*self.inner.data.get() } {
+            if unsafe { &*self.inner.data.get() }.is_some() {
                 return Poll::Pending;
             }
             Poll::Ready(())

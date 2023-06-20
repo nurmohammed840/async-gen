@@ -3,7 +3,7 @@ use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use syn::{
     parse::{Parse, ParseStream},
     visit_mut::VisitMut,
-    *,
+    Expr, ExprAsync, Result,
 };
 
 struct CodeBlock {
