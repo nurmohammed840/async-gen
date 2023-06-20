@@ -1,7 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-#[cfg(feature = "stream")]
 pub use futures_core;
 use pin_project_lite::pin_project;
 use std::{
@@ -254,7 +253,6 @@ impl<G: AsyncGenerator<Return = ()>> AsyncIter<G> {
     }
 }
 
-#[cfg(feature = "stream")]
 impl<G: AsyncGenerator<Return = ()>> futures_core::Stream for AsyncIter<G> {
     type Item = G::Yield;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

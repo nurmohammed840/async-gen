@@ -14,12 +14,8 @@ description = "Async generator in stable rust using async/await"
 
 exclude = ["/async-gen-macros", "/tests",  ".*"]
 
-[features]
-default = ["stream"]
-stream = ["dep:futures-core"]
-
 [dependencies]
-futures-core = { version = "0.3", optional = true }
+futures-core = "0.3"
 async-gen-macros = { path = "./async-gen-macros" }
 pin-project-lite = "0.2"
 
