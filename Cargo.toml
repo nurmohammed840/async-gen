@@ -16,7 +16,7 @@ exclude = ["/async-gen-macros", "/tests",  ".*"]
 
 [dependencies]
 futures-core = "0.3"
-async-gen-macros = { path = "./async-gen-macros" }
+async-gen-macros = "0.1"
 pin-project-lite = "0.2"
 
 [dev-dependencies]
