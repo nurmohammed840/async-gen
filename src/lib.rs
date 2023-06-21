@@ -161,7 +161,12 @@ where
     pub async fn resume(self: &mut Pin<&mut Self>) -> GeneratorState<Y, R> {
         std::future::poll_fn(|cx| self.as_mut().poll_resume(cx)).await
     }
+}
 
+impl<Fut, Y> AsyncGen<Y, Fut>
+where
+    Fut: Future<Output = (Yield<Y>, ())>,
+{
     /// Creates an async iterator from this generator.
     pub fn into_async_iter(self) -> AsyncIter<Self> {
         AsyncIter::from(self)
