@@ -92,7 +92,7 @@ unsafe impl<Y: Send> Send for Inner<Y> {}
 unsafe impl<Y: Sync> Sync for Inner<Y> {}
 
 #[doc(hidden)]
-pub struct Yield<Y> {
+pub struct Yield<Y = ()> {
     inner: Arc<Inner<Y>>,
 }
 
@@ -133,7 +133,7 @@ pin_project! {
     }
 }
 
-impl<Y, R, Fut> AsyncGen<Y, Fut>
+impl<Fut, Y, R> AsyncGen<Y, Fut>
 where
     Fut: Future<Output = (Yield<Y>, R)>,
 {
@@ -147,10 +147,9 @@ where
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    if (*me.inner.data.get()).is_some() {
-                        return Poll::Ready(GeneratorState::Yielded(
-                            (*me.inner.data.get()).take().unwrap(),
-                        ));
+                    let data = &mut *me.inner.data.get();
+                    if data.is_some() {
+                        return Poll::Ready(GeneratorState::Yielded(data.take().unwrap()));
                     }
                 }
                 Poll::Pending
@@ -169,7 +168,10 @@ where
     }
 }
 
-impl<Y, R, Fut: Future<Output = (Yield<Y>, R)>> AsyncGenerator for AsyncGen<Y, Fut> {
+impl<Fut, Y, R> AsyncGenerator for AsyncGen<Y, Fut>
+where
+    Fut: Future<Output = (Yield<Y>, R)>,
+{
     type Yield = Y;
     type Return = R;
 
@@ -260,7 +262,9 @@ impl<G: AsyncGenerator<Return = ()>> futures_core::Stream for AsyncIter<G> {
     }
 }
 
-/// Creates a new generator, which implements the [AsyncGenerator] trait.
+/// Creates a new generator, which implements the [`AsyncGenerator`] trait.
+///
+/// Also see [`gen!`] macro for more details.
 ///
 /// ## Examples
 ///
@@ -288,6 +292,8 @@ where
 }
 
 /// A macro for creating generator.
+///
+/// Also see [`gen`] function for more details.
 ///
 /// ## Examples
 ///

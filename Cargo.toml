@@ -3,7 +3,7 @@ members = ["async-gen-macros"]
 
 [package]
 name = "async-gen"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 license = "MIT"
@@ -16,7 +16,7 @@ exclude = ["/async-gen-macros", "/tests",  ".*"]
 
 [dependencies]
 futures-core = "0.3"
-async-gen-macros = "0.1"
+async-gen-macros = { path = "./async-gen-macros" }
 pin-project-lite = "0.2"
 
 [dev-dependencies]
