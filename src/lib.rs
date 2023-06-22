@@ -164,6 +164,7 @@ where
         }
     }
 
+    #[inline]
     /// See [`AsyncGenerator::poll_resume`] for more details.
     pub async fn resume(self: &mut Pin<&mut Self>) -> GeneratorState<Y, R> {
         std::future::poll_fn(|cx| self.as_mut().poll_resume(cx)).await
@@ -174,11 +175,31 @@ impl<Fut, Y> AsyncGen<Fut, Y>
 where
     Fut: Future<Output = Return<()>>,
 {
+    #[inline]
     /// Creates an async iterator from this generator.
     ///
     /// See [`AsyncIter`] for more details.
     pub fn into_async_iter(self) -> AsyncIter<Self> {
         AsyncIter::from(self)
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Y>> {
+        AsyncGen::poll_resume(self, cx).map(|s| match s {
+            GeneratorState::Yielded(val) => Some(val),
+            GeneratorState::Complete(()) => None,
+        })
+    }
+}
+
+impl<Fut, Y> futures_core::Stream for AsyncGen<Fut, Y>
+where
+    Fut: Future<Output = Return<()>>,
+{
+    type Item = Y;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        AsyncGen::poll_next(self, cx)
     }
 }
 

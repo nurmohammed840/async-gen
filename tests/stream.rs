@@ -54,7 +54,6 @@ async fn return_stream() {
             yield 2;
             yield 3;
         }
-        .into_async_iter()
     }
     let s = build_stream();
 
@@ -68,12 +67,11 @@ async fn return_stream() {
 #[tokio::test]
 async fn consume_channel() {
     let (tx, mut rx) = mpsc::channel(10);
-    let s = gen! {
+    let mut s = pin!(gen! {
         while let Some(v) = rx.recv().await {
             yield v;
         }
-    };
-    let mut s = pin!(s.into_async_iter());
+    });
     for i in 0..3 {
         assert!(tx.send(i).await.is_ok());
         assert_eq!(Some(i), s.next().await);
@@ -91,7 +89,6 @@ async fn borrow_self() {
             gen! {
                 yield &self.0[..];
             }
-            .into_async_iter()
         }
     }
 
@@ -103,17 +100,16 @@ async fn borrow_self() {
 #[tokio::test]
 async fn stream_in_stream() {
     let s = gen! {
-        let g = gen! {
+        let mut s = pin!(gen! {
             for i in 0..3 {
                 yield i;
             }
-        };
-        let mut s = pin!(g.into_async_iter());
+        });
         while let Some(v) = s.next().await {
             yield v;
         }
     };
-    let values: Vec<_> = s.into_async_iter().collect().await;
+    let values: Vec<_> = s.collect().await;
     assert_eq!(3, values.len());
 }
 
@@ -124,7 +120,6 @@ async fn yield_non_unpin_value() {
             yield async move { i };
         }
     }
-    .into_async_iter()
     .buffered(1)
     .collect()
     .await;
@@ -132,58 +127,19 @@ async fn yield_non_unpin_value() {
     assert_eq!(s, vec![0, 1, 2]);
 }
 
-// #[test]
-// fn inner_try_stream() {
-//     use async_stream::try_stream;
-//     use tokio::select;
-//     async fn do_stuff_async() {}
-//     let _ = stream! {
-//         select! {
-//             _ = do_stuff_async() => {
-//                 let another_s = try_stream! {
-//                     yield;
-//                 };
-//                 let _: Result<(), ()> = Box::pin(another_s).next().await.unwrap();
-//             },
-//             else => {},
-//         }
-//         yield
-//     };
-// }
-
-// #[tokio::test]
-// async fn unit_yield_in_select() {
-//     use tokio::select;
-//     async fn do_stuff_async() {}
-//     let s = gen!(async {
-//         select! {
-//             _ = do_stuff_async() => yield (),
-//             else => yield (),
-//         }
-//     });
-//     // let values: Vec<_> = s.collect().await;
-//     // assert_eq!(values.len(), 1);
-// }
-
-// #[tokio::test]
-// async fn yield_with_select() {
-//     use tokio::select;
-//     async fn do_stuff_async() {}
-//     async fn more_async_work() {}
-//     let s = stream! {
-//         select! {
-//             _ = do_stuff_async() => yield "hey",
-//             _ = more_async_work() => yield "hey",
-//             else => yield "hey",
-//         }
-//     };
-//     let values: Vec<_> = s.collect().await;
-//     assert_eq!(values, vec!["hey"]);
-// }
-
-// #[rustversion::attr(not(stable), ignore)]
-// #[test]
-// fn test() {
-//     let t = trybuild::TestCases::new();
-//     t.compile_fail("tests/ui/*.rs");
-// }
+#[tokio::test]
+async fn yield_with_select() {
+    use tokio::select;
+    async fn do_stuff_async() {}
+    async fn more_async_work() {}
+    let s = gen(|mut c| async {
+        select! {
+            _ = do_stuff_async() => c.yield_("hey").await,
+            _ = more_async_work() => c.yield_("hey").await,
+            else => c.yield_("hey").await,
+        }
+        c.return_(())
+    });
+    let values: Vec<_> = s.collect().await;
+    assert_eq!(values, vec!["hey"]);
+}
