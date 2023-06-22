@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
+use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     visit_mut::VisitMut,
@@ -36,7 +37,7 @@ impl VisitMut for EditCodeBlock {
                 self.has_yielded = true;
                 // syn::visit_mut::visit_expr_yield_mut(self, yield_expr);
                 let value_expr = yield_expr.expr.as_ref().unwrap_or(&self.unit);
-                *i = syn::parse_quote! { __yield.yield_(#value_expr).await };
+                *i = syn::parse_quote! { __yielder.yield_(#value_expr).await };
             }
             _ => syn::visit_mut::visit_expr_mut(self, i),
         }
@@ -82,12 +83,11 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
     for stmt in &mut stmts {
         edit.visit_stmt_mut(stmt);
     }
-    let _ty = (!edit.has_yielded).then_some(quote::quote! { ::<(),_, _> });
-    let tokens = quote::quote! {
-        #crate_path::gen #_ty (|mut __yield| async {
-            let __body = async { #(#stmts)* }.await;
-            return (__yield, __body);
+    let _ty = (!edit.has_yielded).then_some(quote! { ::<_, (), _> });
+    TokenStream::from(quote! {
+        #crate_path::gen #_ty (|mut __yielder| async {
+            let v = async { #(#stmts)* }.await;
+            __yielder.return_(v)
         })
-    };
-    TokenStream::from(tokens)
+    })
 }

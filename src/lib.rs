@@ -88,13 +88,15 @@ struct Inner<Y> {
     data: UnsafeCell<Option<Y>>,
 }
 
-unsafe impl<Y: Send> Send for Inner<Y> {}
-unsafe impl<Y: Sync> Sync for Inner<Y> {}
+unsafe impl<Y: Send + Sync> Sync for Inner<Y> {}
 
 #[doc(hidden)]
 pub struct Yield<Y = ()> {
     inner: Arc<Inner<Y>>,
 }
+
+#[doc(hidden)]
+pub struct Return<T = ()>(T);
 
 impl<Y> Yield<Y> {
     /// Same as `yield` keyword.
@@ -107,7 +109,7 @@ impl<Y> Yield<Y> {
         //
         // gen(|y: Yield<()>| async {
         //     // `y` can't escape from this closure. and owned by `async` body
-        //     return (y, ());
+        //     y.return_(())
         // });
         unsafe {
             *self.inner.data.get() = Some(val);
@@ -120,29 +122,34 @@ impl<Y> Yield<Y> {
         })
         .await
     }
+
+    #[inline]
+    pub fn return_<R>(self, _v: R) -> Return<R> {
+        Return(_v)
+    }
 }
 
 pin_project! {
     /// Represent an asyncronus generator. It implementations [`AsyncGenerator`] trait.
     ///
     /// This `struct` is created by [`gen()`]. See its documentation for more details.
-    pub struct AsyncGen<Y, Fut> {
+    pub struct AsyncGen<Fut, Y> {
         inner: Arc<Inner<Y>>,
         #[pin]
         fut: Fut,
     }
 }
 
-impl<Fut, Y, R> AsyncGen<Y, Fut>
+impl<Fut, Y, R> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = (Yield<Y>, R)>,
+    Fut: Future<Output = Return<R>>,
 {
     /// See [`AsyncGenerator::poll_resume`] for more details.
     #[doc(hidden)]
     pub fn poll_resume(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<GeneratorState<Y, R>> {
         let me = self.project();
         match me.fut.poll(cx) {
-            Poll::Ready((_, val)) => Poll::Ready(GeneratorState::Complete(val)),
+            Poll::Ready(Return(val)) => Poll::Ready(GeneratorState::Complete(val)),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
@@ -163,19 +170,21 @@ where
     }
 }
 
-impl<Fut, Y> AsyncGen<Y, Fut>
+impl<Fut, Y> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = (Yield<Y>, ())>,
+    Fut: Future<Output = Return<()>>,
 {
     /// Creates an async iterator from this generator.
+    ///
+    /// See [`AsyncIter`] for more details.
     pub fn into_async_iter(self) -> AsyncIter<Self> {
         AsyncIter::from(self)
     }
 }
 
-impl<Fut, Y, R> AsyncGenerator for AsyncGen<Y, Fut>
+impl<Fut, Y, R> AsyncGenerator for AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = (Yield<Y>, R)>,
+    Fut: Future<Output = Return<R>>,
 {
     type Yield = Y;
     type Return = R;
@@ -195,18 +204,23 @@ pin_project! {
     ///
     /// ```
     /// use async_gen::{gen, AsyncIter};
+    /// use futures_core::Stream;
     /// use futures_util::StreamExt;
     ///
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// let it = AsyncIter::from(gen! {
-    ///     yield 1;
-    ///     yield 2;
-    ///     yield 3;
-    /// });
-    /// let v: Vec<_> = it.collect().await;
-    /// assert_eq!(v, [1, 2, 3]);
-    /// # }
+    /// fn get_async_iter() -> impl Stream<Item = i32> {
+    ///     AsyncIter::from(gen! {
+    ///         yield 1;
+    ///         yield 2;
+    ///         yield 3;
+    ///     })
+    /// }
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let it = get_async_iter();
+    ///     let v: Vec<_> = it.collect().await;
+    ///     assert_eq!(v, [1, 2, 3]);
+    /// }
     /// ```
     #[derive(Clone)]
     pub struct AsyncIter<G> {
@@ -274,18 +288,24 @@ impl<G: AsyncGenerator<Return = ()>> futures_core::Stream for AsyncIter<G> {
 /// ## Examples
 ///
 /// ```
-/// use async_gen::{gen, AsyncGenerator};
+/// use async_gen::{gen, AsyncGen, AsyncGenerator, Return};
+/// use std::future::Future;
 ///
-/// fn create_generator() -> impl AsyncGenerator {
-///     gen(|mut c| async {
+/// fn example() {
+///     let g = gen(|mut c| async {
 ///         c.yield_(42).await;
-///         return (c, "foo");
-///     })
+///         c.return_("42")
+///     });
+///
+///     check_type_1(&g);
+///     check_type_2(&g);
 /// }
+/// fn check_type_1(_: &AsyncGen<impl Future<Output = Return<&'static str>>, i32>) {}
+/// fn check_type_2(_: &impl AsyncGenerator<Yield = i32, Return = &'static str>) {}
 /// ```
-pub fn gen<Y, R, Fut>(fut: impl FnOnce(Yield<Y>) -> Fut) -> AsyncGen<Y, Fut>
+pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yield<Y>) -> Fut) -> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = (Yield<Y>, R)>,
+    Fut: Future<Output = Return<R>>,
 {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
@@ -298,7 +318,7 @@ where
 
 /// A macro for creating generator.
 ///
-/// Also see [`gen`] function for more details.
+/// Also see [`gen()`] function for more details.
 ///
 /// ## Examples
 ///
@@ -310,11 +330,11 @@ where
 /// # async fn main() {
 /// let gen = gen! {
 ///     yield 42;
-///     return "foo"
+///     return "42"
 /// };
 /// let mut g = pin!(gen);
 /// assert_eq!(g.resume().await, GeneratorState::Yielded(42));
-/// assert_eq!(g.resume().await, GeneratorState::Complete("foo"));
+/// assert_eq!(g.resume().await, GeneratorState::Complete("42"));
 /// # }
 /// ```
 #[macro_export]

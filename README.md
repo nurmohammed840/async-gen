@@ -7,7 +7,7 @@ Add it as a dependency to your Rust project by adding the following line to your
 
 ```toml
 [dependencies]
-async-gen = "0.1"
+async-gen = "0.2"
 ```
 
 # Examples
@@ -20,10 +20,10 @@ use async_gen::{gen, GeneratorState};
 async fn main() {
     let g = gen! {
         yield 42;
-        return "foo"
+        return "42"
     };
     let mut g = pin!(g);
     assert_eq!(g.resume().await, GeneratorState::Yielded(42));
-    assert_eq!(g.resume().await, GeneratorState::Complete("foo"));
+    assert_eq!(g.resume().await, GeneratorState::Complete("42"));
 }
 ```
