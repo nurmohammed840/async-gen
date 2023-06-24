@@ -63,12 +63,13 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
 
 fn out(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> Group {
     let mut o = TokenStream::new();
+
     while let Some(tt) = tokens.next() {
         match tt {
             TokenTree::Ident(name) if name.to_string() == "yield" => {
                 *has_yielded = true;
                 let mut expr = TokenStream::new();
-                while let Some(tt) = tokens.next() {
+                for tt in &mut tokens {
                     match tt {
                         TokenTree::Punct(p) if p.as_char() == ';' => break,
                         _ => expr.append(tt),
