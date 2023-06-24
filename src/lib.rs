@@ -183,13 +183,23 @@ where
         AsyncIter::from(self)
     }
 
-    #[inline]
     #[doc(hidden)]
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Y>> {
-        AsyncGen::poll_resume(self, cx).map(|s| match s {
-            GeneratorState::Yielded(val) => Some(val),
-            GeneratorState::Complete(()) => None,
-        })
+        let me = self.project();
+        match me.fut.poll(cx) {
+            Poll::Ready(Return(())) => Poll::Ready(None),
+            Poll::Pending => {
+                // SEAFTY: We just return from `me.fut`,
+                // So this is safe and unique access to `me.inner.data`
+                unsafe {
+                    let data = &mut *me.inner.data.get();
+                    if data.is_some() {
+                        return Poll::Ready(data.take());
+                    }
+                }
+                Poll::Pending
+            }
+        }
     }
 }
 
