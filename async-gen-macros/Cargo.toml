@@ -13,6 +13,3 @@ description = "Async generator in stable rust using async/await"
 proc-macro = true
 
 [dependencies]
-syn = { version = "2", features = ["full", "visit-mut"] }
-quote = "1"
-proc-macro2 = "1"

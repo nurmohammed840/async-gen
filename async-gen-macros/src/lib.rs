@@ -1,63 +1,56 @@
-use proc_macro2::{
-    token_stream, Delimiter, Group, Ident, Punct, Spacing, Span, TokenStream, TokenTree,
-};
-use quote::{quote, TokenStreamExt};
+use proc_macro::*;
+use z::TokenStreamExt;
 
 #[proc_macro]
-pub fn gen_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let mut tokens = TokenStream::from(input).into_iter();
+pub fn gen_inner(input: TokenStream) -> TokenStream {
+    let mut tokens = input.into_iter();
     let crate_path = match tokens.next().unwrap() {
         TokenTree::Group(group) => group.stream(),
-        _ => todo!(),
+        _ => unimplemented!(),
     };
 
     let mut has_yielded = false;
     let output = out(tokens, &mut has_yielded);
-    let _ty = (!has_yielded).then_some(quote! { ::<_, (), _> });
-
-    // quote! {
-    //     #crate_path::gen #_ty (|mut yield_| async {
-    //         let v = async #output.await;
-    //         yield_.return_(v)
-    //     })
-    // }
-    // .into()
     {
         let mut s = TokenStream::new();
 
-        quote::ToTokens::to_tokens(&crate_path, &mut s);
-
-        s.append(Punct::new(':', Spacing::Joint));
-        s.append(Punct::new(':', Spacing::Alone));
-        s.append(z::ident("gen"));
-
-        quote::ToTokens::to_tokens(&_ty, &mut s);
+        s.extend(crate_path.clone());
+        s.append_colon2();
+        s.append_ident("gen");
 
         s.append({
             let mut s = TokenStream::new();
-            s.append(z::punct('|'));
-            s.append(z::ident("mut"));
-            s.append(z::ident("yield_"));
-            s.append(z::punct('|'));
-            s.append(z::ident("async"));
+            s.append_punct('|');
+            s.append_ident("mut");
+            s.append_ident("yield_");
+
+            if !has_yielded {
+                s.append_punct(':');
+                s.extend(crate_path);
+                s.append_colon2();
+                s.append_ident("Yield");
+            }
+
+            s.append_punct('|');
+            s.append_ident("async");
             s.append({
                 let mut s = TokenStream::new();
-                s.append(z::ident("let"));
-                s.append(z::ident("v"));
-                s.append(z::punct('='));
-                s.append(z::ident("async"));
+                s.append_ident("let");
+                s.append_ident("v");
+                s.append_punct('=');
+                s.append_ident("async");
 
-                quote::ToTokens::to_tokens(&output, &mut s);
+                s.append(output);
 
-                s.append(z::punct('.'));
-                s.append(z::ident("await"));
-                s.append(z::punct(';'));
-                s.append(z::ident("yield_"));
-                s.append(z::punct('.'));
-                s.append(z::ident("return_"));
+                s.append_punct('.');
+                s.append_ident("await");
+                s.append_punct(';');
+                s.append_ident("yield_");
+                s.append_punct('.');
+                s.append_ident("return_");
                 s.append({
                     let mut s = TokenStream::new();
-                    s.append(z::ident("v"));
+                    s.append_ident("v");
                     Group::new(Delimiter::Parenthesis, s)
                 });
                 Group::new(Delimiter::Brace, s)
@@ -66,14 +59,13 @@ pub fn gen_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         });
         s
     }
-    .into()
 }
 
 fn out(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> Group {
     let mut o = TokenStream::new();
     while let Some(tt) = tokens.next() {
         match tt {
-            TokenTree::Ident(name) if name == "yield" => {
+            TokenTree::Ident(name) if name.to_string() == "yield" => {
                 *has_yielded = true;
                 let mut expr = TokenStream::new();
                 while let Some(tt) = tokens.next() {
@@ -82,13 +74,13 @@ fn out(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> Group {
                         _ => expr.append(tt),
                     }
                 }
-                o.append(z::ident("yield_"));
-                o.append(z::punct('.'));
-                o.append(z::ident("yield_"));
+                o.append_ident("yield_");
+                o.append_punct('.');
+                o.append_ident("yield_");
                 o.append(Group::new(Delimiter::Parenthesis, expr));
-                o.append(z::punct('.'));
-                o.append(z::ident("await"));
-                o.append(z::punct(';'));
+                o.append_punct('.');
+                o.append_ident("await");
+                o.append_punct(';');
             }
             TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
                 o.append(out(g.stream().into_iter(), has_yielded));
@@ -101,10 +93,36 @@ fn out(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> Group {
 
 mod z {
     use super::*;
-    pub fn punct(ch: char) -> Punct {
-        Punct::new(ch, Spacing::Alone)
+
+    pub trait TokenStreamExt {
+        fn append<U>(&mut self, token: U)
+        where
+            U: Into<TokenTree>;
+
+        #[inline]
+        fn append_punct(&mut self, ch: char) {
+            self.append(Punct::new(ch, Spacing::Alone))
+        }
+
+        #[inline]
+        fn append_ident(&mut self, name: &str) {
+            self.append(Ident::new(name, Span::call_site()))
+        }
+
+        #[inline]
+        fn append_colon2(&mut self) {
+            self.append(Punct::new(':', Spacing::Joint));
+            self.append(Punct::new(':', Spacing::Alone));
+        }
     }
-    pub fn ident(name: &str) -> Ident {
-        Ident::new(name, Span::call_site())
+
+    impl TokenStreamExt for TokenStream {
+        #[inline]
+        fn append<U>(&mut self, token: U)
+        where
+            U: Into<TokenTree>,
+        {
+            self.extend(std::iter::once(token.into()));
+        }
     }
 }
