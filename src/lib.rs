@@ -5,7 +5,8 @@ pub use futures_core;
 use pin_project_lite::pin_project;
 use std::{
     cell::UnsafeCell,
-    future::Future,
+    future::{poll_fn, Future},
+    marker::PhantomData,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -86,8 +87,10 @@ pub trait AsyncGenerator {
 
 struct Inner<Y> {
     data: UnsafeCell<Option<Y>>,
+    _marker: PhantomData<Y>,
 }
 
+unsafe impl<Y: Send> Send for Inner<Y> {}
 unsafe impl<Y: Send + Sync> Sync for Inner<Y> {}
 
 #[doc(hidden)]
@@ -114,7 +117,8 @@ impl<Y> Yield<Y> {
         unsafe {
             *self.inner.data.get() = Some(val);
         }
-        std::future::poll_fn(|_| {
+
+        poll_fn(|_| {
             if unsafe { (*self.inner.data.get()).is_some() } {
                 return Poll::Pending;
             }
@@ -156,7 +160,7 @@ where
                 unsafe {
                     let data = &mut *me.inner.data.get();
                     if data.is_some() {
-                        return Poll::Ready(GeneratorState::Yielded(data.take().unwrap()));
+                        return Poll::Ready(GeneratorState::Yielded(data.take().unwrap_unchecked()));
                     }
                 }
                 Poll::Pending
@@ -167,7 +171,7 @@ where
     #[inline]
     /// See [`AsyncGenerator::poll_resume`] for more details.
     pub async fn resume(self: &mut Pin<&mut Self>) -> GeneratorState<Y, R> {
-        std::future::poll_fn(|cx| self.as_mut().poll_resume(cx)).await
+        poll_fn(|cx| self.as_mut().poll_resume(cx)).await
     }
 }
 
@@ -208,6 +212,8 @@ where
     Fut: Future<Output = Return<()>>,
 {
     type Item = Y;
+
+    #[inline]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         AsyncGen::poll_next(self, cx)
     }
@@ -220,6 +226,7 @@ where
     type Yield = Y;
     type Return = R;
 
+    #[inline]
     fn poll_resume(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -297,6 +304,7 @@ impl<G: AsyncGenerator<Return = ()>> AsyncIter<G> {
     /// Rust's usual rules apply: calls must never cause undefined behavior
     /// (memory corruption, incorrect use of `unsafe` functions, or the like),
     /// regardless of the async iterator's state.
+    #[inline]
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<G::Yield>> {
         self.project().gen.poll_resume(cx).map(|s| match s {
             GeneratorState::Yielded(val) => Some(val),
@@ -307,6 +315,7 @@ impl<G: AsyncGenerator<Return = ()>> AsyncIter<G> {
 
 impl<G: AsyncGenerator<Return = ()>> futures_core::Stream for AsyncIter<G> {
     type Item = G::Yield;
+    #[inline]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         AsyncIter::poll_next(self, cx)
     }
@@ -340,6 +349,7 @@ where
 {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
+        _marker: PhantomData,
     });
     let fut = fut(Yield {
         inner: inner.clone(),

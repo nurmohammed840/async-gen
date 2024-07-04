@@ -2,7 +2,6 @@ use async_gen::{gen, GeneratorState};
 use futures_core::Stream;
 use futures_util::stream::StreamExt;
 use std::pin::pin;
-use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn noop_stream() {
@@ -66,7 +65,7 @@ async fn return_stream() {
 
 #[tokio::test]
 async fn consume_channel() {
-    let (tx, mut rx) = mpsc::channel(10);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(10);
     let mut s = pin!(gen! {
         while let Some(v) = rx.recv().await {
             yield v;
@@ -128,18 +127,52 @@ async fn yield_non_unpin_value() {
 }
 
 #[tokio::test]
+async fn unit_yield_in_select() {
+    async fn do_stuff_async() {}
+
+    let s = gen! {
+        tokio::select! {
+            _ = do_stuff_async() => { yield },
+            else => { yield },
+        };
+    };
+    let values: Vec<_> = s.collect().await;
+    assert_eq!(values.len(), 1);
+}
+
+#[tokio::test]
 async fn yield_with_select() {
-    use tokio::select;
     async fn do_stuff_async() {}
     async fn more_async_work() {}
-    let s = gen(|mut c| async {
-        select! {
-            _ = do_stuff_async() => c.yield_("hey").await,
-            _ = more_async_work() => c.yield_("hey").await,
-            else => c.yield_("hey").await,
-        }
-        c.return_(())
-    });
+
+    let s = gen! {
+        tokio::select! {
+            _ = do_stuff_async() => { yield "hey" },
+            _ = more_async_work() => { yield "hey" },
+            else => { yield "hey" },
+        };
+    };
     let values: Vec<_> = s.collect().await;
     assert_eq!(values, vec!["hey"]);
 }
+
+// #[test]
+// fn inner_try_stream() {
+//     use async_stream::try_stream;
+//     use tokio::select;
+
+//     async fn do_stuff_async() {}
+
+//     let _ = stream! {
+//         select! {
+//             _ = do_stuff_async() => {
+//                 let another_s = try_stream! {
+//                     yield;
+//                 };
+//                 let _: Result<(), ()> = Box::pin(another_s).next().await.unwrap();
+//             },
+//             else => {},
+//         }
+//         yield
+//     };
+// }

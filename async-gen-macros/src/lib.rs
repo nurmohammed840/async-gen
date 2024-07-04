@@ -4,7 +4,9 @@ use proc_macro::*;
 pub fn gen_inner(input: TokenStream) -> TokenStream {
     let mut tokens = input.into_iter();
 
-    let Some(TokenTree::Group(crate_path)) = tokens.next() else { unimplemented!() };
+    let Some(TokenTree::Group(crate_path)) = tokens.next() else {
+        unimplemented!()
+    };
     let crate_path = crate_path.stream();
 
     let mut has_yielded = false;
@@ -66,6 +68,9 @@ fn out(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> Group {
                         _ => expr.push(tt),
                     }
                 }
+                if expr.is_empty() {
+                    expr.push(Group::new(Delimiter::Parenthesis, TokenStream::new()));
+                };
                 o.push_ident("yield_");
                 o.push_punct('.');
                 o.push_ident("yield_");
