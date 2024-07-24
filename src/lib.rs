@@ -6,7 +6,6 @@ use pin_project_lite::pin_project;
 use std::{
     cell::UnsafeCell,
     future::{poll_fn, Future},
-    marker::PhantomData,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -87,7 +86,6 @@ pub trait AsyncGenerator {
 
 struct Inner<Y> {
     data: UnsafeCell<Option<Y>>,
-    _marker: PhantomData<Y>,
 }
 
 unsafe impl<Y: Send> Send for Inner<Y> {}
@@ -158,9 +156,10 @@ where
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    let data = &mut *me.inner.data.get();
-                    if data.is_some() {
-                        return Poll::Ready(GeneratorState::Yielded(data.take().unwrap_unchecked()));
+                    if (*me.inner.data.get()).is_some() {
+                        return Poll::Ready(GeneratorState::Yielded(
+                            (*me.inner.data.get()).take().unwrap_unchecked(),
+                        ));
                     }
                 }
                 Poll::Pending
@@ -196,9 +195,8 @@ where
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    let data = &mut *me.inner.data.get();
-                    if data.is_some() {
-                        return Poll::Ready(data.take());
+                    if (*me.inner.data.get()).is_some() {
+                        return Poll::Ready((*me.inner.data.get()).take());
                     }
                 }
                 Poll::Pending
@@ -349,7 +347,6 @@ where
 {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
-        _marker: PhantomData,
     });
     let fut = fut(Yield {
         inner: inner.clone(),
