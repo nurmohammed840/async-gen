@@ -15,9 +15,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install Miri
+      run: |
+        rustup toolchain install nightly --component miri
+        cargo +nightly miri setup
+
     - name: Run clippy
       run: cargo clippy
+
     - name: Run tests
       run: cargo test
+      
     - name: Run miri test
       run: cargo +nightly miri test --test stream --test try_stream
