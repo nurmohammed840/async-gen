@@ -7,7 +7,7 @@ use std::pin::pin;
 #[tokio::test]
 async fn spans_preserved() {
     let mut s = pin!(gen! {
-        assert_eq!(line!(), 8);
+        assert_eq!(line!(), 10);
     });
 
     while s.next().await.is_some() {
