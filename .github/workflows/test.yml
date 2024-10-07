@@ -19,5 +19,5 @@ jobs:
       run: cargo clippy
     - name: Run tests
       run: cargo test
-    - name: Run Benchmark
-      run: cargo bench
+    - name: Run miri test
+      run: cargo +nightly miri test --test stream --test try_stream
