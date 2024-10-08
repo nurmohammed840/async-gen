@@ -23,7 +23,7 @@ fn yield_then_err() {
         let mut s = pin!(gen! {
             yield "hello";
             Err("world")?;
-            Result::<_, &str>::Ok(())
+            Ok(())
         });
         assert_eq!(s.resume().await, GeneratorState::Yielded("hello"));
         assert_eq!(s.resume().await, GeneratorState::Complete(Err("world")));

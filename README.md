@@ -1,5 +1,9 @@
 This library provides a way to create asynchronous generator using the `async/await` feature in stable Rust.
 
+It is similar to [async-stream](https://docs.rs/async-stream/latest/async_stream/),
+But closely mimics the [Coroutine API](https://doc.rust-lang.org/std/ops/trait.Coroutine.html),
+Allowing the generator also return a value upon completion, in addition to yielding intermediate values.
+
 # Installation
 
 Add it as a dependency to your Rust project by adding the following line to your `Cargo.toml` file:

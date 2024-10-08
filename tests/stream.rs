@@ -40,6 +40,19 @@ fn yield_single_value() {
 }
 
 #[test]
+fn fused() {
+    block_on(async {
+        let s = pin!(gen! {
+            yield "hello";
+        });
+        let mut s = s.fuse();
+        assert_eq!(s.next().await, Some("hello"));
+        assert_eq!(s.next().await, None);
+        assert_eq!(s.next().await, None);
+    });
+}
+
+#[test]
 fn yield_multi_value() {
     block_on(async {
         let mut s = pin!(gen! {
@@ -178,24 +191,3 @@ fn yield_with_select() {
         assert_eq!(values, vec!["hey"]);
     })
 }
-
-// #[test]
-// fn inner_try_stream() {
-//     use async_stream::try_stream;
-//     use tokio::select;
-
-//     async fn do_stuff_async() {}
-
-//     let _ = stream! {
-//         select! {
-//             _ = do_stuff_async() => {
-//                 let another_s = try_stream! {
-//                     yield;
-//                 };
-//                 let _: Result<(), ()> = Box::pin(another_s).next().await.unwrap();
-//             },
-//             else => {},
-//         }
-//         yield
-//     };
-// }
