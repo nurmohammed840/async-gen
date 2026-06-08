@@ -1,7 +1,5 @@
 use async_gen::{gen, stream, GeneratorState};
-use futures::executor::block_on;
-use futures_core::Stream;
-use futures_util::stream::StreamExt;
+use futures::{executor::block_on, future::FutureExt, SinkExt, Stream, StreamExt};
 use std::pin::pin;
 
 #[test]
@@ -90,9 +88,9 @@ fn return_stream() {
 #[test]
 fn consume_channel() {
     block_on(async {
-        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+        let (mut tx, mut rx) = futures::channel::mpsc::channel(10);
         let mut s = pin!(stream! {
-            while let Some(v) = rx.recv().await {
+            while let Some(v) = rx.next().await {
                 yield v;
             }
         });
@@ -164,9 +162,10 @@ fn unit_yield_in_select() {
         async fn do_stuff_async() {}
 
         let s = stream! {
-            tokio::select! {
-                _ = do_stuff_async() => { yield },
-                else => { yield },
+            let mut fut = pin!(do_stuff_async().fuse());
+            futures::select! {
+                _ = fut => { yield; },
+                complete => { yield; },
             };
         };
         let values: Vec<_> = s.collect().await;
@@ -181,10 +180,14 @@ fn yield_with_select() {
         async fn more_async_work() {}
 
         let s = stream! {
-            tokio::select! {
-                _ = do_stuff_async() => { yield "hey" },
-                _ = more_async_work() => { yield "hey" },
-                else => { yield "hey" },
+            // 1. Store, fuse, and heap-pin both futures
+            let mut fut1 = pin!(do_stuff_async().fuse());
+            let mut fut2 = pin!(more_async_work().fuse());
+
+            futures::select! {
+                _ = fut1 => { yield "hey" },
+                _ = fut2 => { yield "hey" },
+                complete => { yield "hey" },
             };
         };
         let values: Vec<_> = s.collect().await;

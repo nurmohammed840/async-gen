@@ -1,10 +1,10 @@
 #![allow(clippy::never_loop)]
 
 use async_gen::stream;
-use futures_util::stream::StreamExt;
+use futures::StreamExt;
 use std::pin::pin;
 
-#[tokio::test]
+#[nio::test]
 async fn spans_preserved() {
     let mut s = pin!(stream! {
         assert_eq!(line!(), 10);

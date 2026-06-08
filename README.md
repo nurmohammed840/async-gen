@@ -20,7 +20,7 @@ async-gen = "0.2"
 use std::pin::pin;
 use async_gen::{gen, GeneratorState};
 
-#[tokio::main]
+#[nio::main]
 async fn main() {
     let g = gen! {
         yield 42;

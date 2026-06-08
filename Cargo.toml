@@ -24,8 +24,7 @@ async-gen-macros = { version = "0.4", path = "./async-gen-macros" }
 pin-project-lite = "0.2"
 
 [dev-dependencies]
-futures-util = "0.3"
-tokio = { version = "1", features = ["full"] }
+nio = "0.1.4"
 
 async-stream = "*"
 criterion = "*"

@@ -21,7 +21,7 @@ pub use types::{AsyncGenerator, GeneratorState};
 /// use std::pin::pin;
 /// use async_gen::{gen, GeneratorState};
 ///
-/// # #[tokio::main]
+/// # #[nio::main]
 /// # async fn main() {
 /// let gen = gen! {
 ///     yield 42;

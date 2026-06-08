@@ -15,8 +15,7 @@ pin_project! {
     ///
     /// ```
     /// use async_gen::{gen, AsyncIter};
-    /// use futures_core::Stream;
-    /// use futures_util::StreamExt;
+    /// use futures::{StreamExt, Stream};
     ///
     /// fn get_async_iter() -> impl Stream<Item = i32> {
     ///     AsyncIter::from(gen! {
@@ -26,7 +25,7 @@ pin_project! {
     ///     })
     /// }
     ///
-    /// #[tokio::main]
+    /// #[nio::main]
     /// async fn main() {
     ///     let it = get_async_iter();
     ///     let v: Vec<_> = it.collect().await;

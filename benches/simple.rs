@@ -1,7 +1,7 @@
 mod utils;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use futures_util::StreamExt;
+use futures::StreamExt;
 use std::pin::pin;
 
 const ITER: usize = 10000;
