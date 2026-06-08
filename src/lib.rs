@@ -153,10 +153,8 @@ where
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    if (*me.inner.data.get()).is_some() {
-                        return Poll::Ready(GeneratorState::Yielded(
-                            (*me.inner.data.get()).take().unwrap_unchecked(),
-                        ));
+                    if let Some(val) = (*me.inner.data.get()).take() {
+                        return Poll::Ready(GeneratorState::Yielded(val));
                     }
                 }
                 Poll::Pending
@@ -192,8 +190,8 @@ where
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    if (*me.inner.data.get()).is_some() {
-                        return Poll::Ready((*me.inner.data.get()).take());
+                    if let Some(val) = (*me.inner.data.get()).take() {
+                        return Poll::Ready(Some(val));
                     }
                 }
                 Poll::Pending

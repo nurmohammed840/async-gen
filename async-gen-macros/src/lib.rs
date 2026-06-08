@@ -20,7 +20,7 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
     o.push_group(Delimiter::Parenthesis, |o| {
         o.push_punct('|');
         o.push_ident("mut");
-        o.push_ident("yield_");
+        o.push_ident("_c");
 
         if !has_yielded {
             o.push_punct(':');
@@ -43,7 +43,7 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
             o.push_punct('.');
             o.push_ident("await");
             o.push_punct(';');
-            o.push_ident("yield_");
+            o.push_ident("_c");
             o.push_punct('.');
             o.push_ident("return_");
             o.push_group(Delimiter::Parenthesis, |o| {
@@ -71,7 +71,7 @@ fn out(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> Group {
                 if expr.is_empty() {
                     expr.push(Group::new(Delimiter::Parenthesis, TokenStream::new()));
                 };
-                o.push_ident("yield_");
+                o.push_ident("_c");
                 o.push_punct('.');
                 o.push_ident("yield_");
                 o.push(Group::new(Delimiter::Parenthesis, expr));

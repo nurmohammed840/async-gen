@@ -20,7 +20,7 @@ harness = false
 
 [dependencies]
 futures-core = "0.3"
-async-gen-macros = { version = "0.3", path = "./async-gen-macros" }
+async-gen-macros = { version = "0.4", path = "./async-gen-macros" }
 pin-project-lite = "0.2"
 
 [dev-dependencies]
