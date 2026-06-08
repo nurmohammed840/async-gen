@@ -3,6 +3,8 @@ use std::{
     task::{Context, Poll},
 };
 
+use futures_core::Stream;
+
 /// The result of a generator resumption.
 ///
 /// This enum is returned from the `Generator::resume` method and indicates the
@@ -74,4 +76,20 @@ pub trait AsyncGenerator {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<GeneratorState<Self::Yield, Self::Return>>;
+}
+
+impl<S: Stream> AsyncGenerator for S {
+    type Yield = S::Item;
+    type Return = ();
+
+    #[inline]
+    fn poll_resume(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<GeneratorState<Self::Yield, Self::Return>> {
+        self.poll_next(cx).map(|val| match val {
+            Some(val) => GeneratorState::Yielded(val),
+            None => GeneratorState::Complete(()),
+        })
+    }
 }

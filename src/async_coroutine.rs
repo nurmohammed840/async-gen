@@ -17,7 +17,7 @@ use crate::{AsyncGenerator, AsyncIter, GeneratorState};
 /// ## Examples
 ///
 /// ```
-/// use async_gen::{gen, AsyncGen, AsyncGenerator};
+/// use async_gen::{gen, AsyncGen, AsyncGenerator, Return};
 /// use std::future::Future;
 ///
 /// fn example() {

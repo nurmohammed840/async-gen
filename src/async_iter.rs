@@ -93,22 +93,6 @@ where
     }
 }
 
-impl<S: Stream> AsyncGenerator for S {
-    type Yield = S::Item;
-    type Return = ();
-
-    #[inline]
-    fn poll_resume(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<GeneratorState<Self::Yield, Self::Return>> {
-        self.poll_next(cx).map(|val| match val {
-            Some(val) => GeneratorState::Yielded(val),
-            None => GeneratorState::Complete(()),
-        })
-    }
-}
-
 /// Converts an [`AsyncGenerator`] into an async iterator.
 #[inline]
 pub fn async_iter_from<G>(gen: G) -> impl Stream<Item = G::Yield>
