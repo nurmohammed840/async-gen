@@ -96,9 +96,6 @@ pub struct Yield<Y = ()> {
     inner: Arc<Inner<Y>>,
 }
 
-#[doc(hidden)]
-pub struct Return<T = ()>(T);
-
 impl<Y> Yield<Y> {
     /// Same as `yield` keyword.
     ///
@@ -126,8 +123,8 @@ impl<Y> Yield<Y> {
     }
 
     #[inline]
-    pub fn return_<R>(self, _v: R) -> Return<R> {
-        Return(_v)
+    pub fn return_<R>(self, v: R) -> R {
+        v
     }
 }
 
@@ -144,14 +141,14 @@ pin_project! {
 
 impl<Fut, Y, R> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = Return<R>>,
+    Fut: Future<Output = R>,
 {
     /// See [`AsyncGenerator::poll_resume`] for more details.
     #[doc(hidden)]
     pub fn poll_resume(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<GeneratorState<Y, R>> {
         let me = self.project();
         match me.fut.poll(cx) {
-            Poll::Ready(Return(val)) => Poll::Ready(GeneratorState::Complete(val)),
+            Poll::Ready(val) => Poll::Ready(GeneratorState::Complete(val)),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
@@ -176,7 +173,7 @@ where
 
 impl<Fut, Y> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = Return<()>>,
+    Fut: Future<Output = ()>,
 {
     #[inline]
     /// Creates an async iterator from this generator.
@@ -190,7 +187,7 @@ where
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Y>> {
         let me = self.project();
         match me.fut.poll(cx) {
-            Poll::Ready(Return(())) => Poll::Ready(None),
+            Poll::Ready(()) => Poll::Ready(None),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
@@ -207,7 +204,7 @@ where
 
 impl<Fut, Y> futures_core::Stream for AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = Return<()>>,
+    Fut: Future<Output = ()>,
 {
     type Item = Y;
 
@@ -219,7 +216,7 @@ where
 
 impl<Fut, Y, R> AsyncGenerator for AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = Return<R>>,
+    Fut: Future<Output = R>,
 {
     type Yield = Y;
     type Return = R;
@@ -326,7 +323,7 @@ impl<G: AsyncGenerator<Return = ()>> futures_core::Stream for AsyncIter<G> {
 /// ## Examples
 ///
 /// ```
-/// use async_gen::{gen, AsyncGen, AsyncGenerator, Return};
+/// use async_gen::{gen, AsyncGen, AsyncGenerator};
 /// use std::future::Future;
 ///
 /// fn example() {
@@ -338,12 +335,12 @@ impl<G: AsyncGenerator<Return = ()>> futures_core::Stream for AsyncIter<G> {
 ///     check_type_1(&g);
 ///     check_type_2(&g);
 /// }
-/// fn check_type_1(_: &AsyncGen<impl Future<Output = Return<&'static str>>, i32>) {}
+/// fn check_type_1(_: &AsyncGen<impl Future<Output = &'static str>, i32>) {}
 /// fn check_type_2(_: &impl AsyncGenerator<Yield = i32, Return = &'static str>) {}
 /// ```
 pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yield<Y>) -> Fut) -> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = Return<R>>,
+    Fut: Future<Output = R>,
 {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
