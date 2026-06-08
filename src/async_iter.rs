@@ -4,39 +4,35 @@ use std::{
 };
 
 use futures_core::Stream;
-use pin_project_lite::pin_project;
 
 use crate::{AsyncGenerator, GeneratorState};
 
-pin_project! {
-    /// An async iterator over the values yielded by an underlying generator.
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use async_gen::{gen, AsyncIter};
-    /// use futures::{StreamExt, Stream};
-    ///
-    /// fn get_async_iter() -> impl Stream<Item = i32> {
-    ///     AsyncIter::from(gen! {
-    ///         yield 1;
-    ///         yield 2;
-    ///         yield 3;
-    ///     })
-    /// }
-    ///
-    /// #[nio::main]
-    /// async fn main() {
-    ///     let it = get_async_iter();
-    ///     let v: Vec<_> = it.collect().await;
-    ///     assert_eq!(v, [1, 2, 3]);
-    /// }
-    /// ```
-    #[derive(Clone)]
-    pub struct AsyncIter<G> {
-        #[pin]
-        gen: G,
-    }
+/// An async iterator over the values yielded by an underlying generator.
+///
+/// ## Example
+///
+/// ```
+/// use async_gen::{gen, AsyncIter};
+/// use futures::{StreamExt, Stream};
+///
+/// fn get_async_iter() -> impl Stream<Item = i32> {
+///     AsyncIter::from(gen! {
+///         yield 1;
+///         yield 2;
+///         yield 3;
+///     })
+/// }
+///
+/// #[nio::main]
+/// async fn main() {
+///     let it = get_async_iter();
+///     let v: Vec<_> = it.collect().await;
+///     assert_eq!(v, [1, 2, 3]);
+/// }
+/// ```
+#[derive(Clone)]
+pub struct AsyncIter<G> {
+    gen: G,
 }
 
 impl<G> AsyncIter<G>
@@ -74,7 +70,11 @@ where
     /// regardless of the async iterator's state.
     #[inline]
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<G::Yield>> {
-        self.project().gen.poll_resume(cx).map(|s| match s {
+        unsafe {
+            let me = self.get_unchecked_mut();
+            Pin::new_unchecked(&mut me.gen).poll_resume(cx)
+        }
+        .map(|s| match s {
             GeneratorState::Yielded(val) => Some(val),
             GeneratorState::Complete(()) => None,
         })

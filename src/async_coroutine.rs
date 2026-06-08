@@ -2,11 +2,9 @@ use std::{
     cell::UnsafeCell,
     future::{poll_fn, Future},
     pin::Pin,
-    sync::Arc,
+    ptr::NonNull,
     task::{Context, Poll},
 };
-
-use pin_project_lite::pin_project;
 
 use crate::{AsyncGenerator, AsyncIter, GeneratorState};
 
@@ -36,21 +34,31 @@ pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yielder<Y>) -> Fut) -> AsyncGen<Fut, Y>
 where
     Fut: Future<Output = Return<R>>,
 {
-    let inner = Arc::new(Inner {
-        data: UnsafeCell::new(None),
-    });
+    let cell: Box<UnsafeCell<Option<Y>>> = Box::new(UnsafeCell::new(None));
+    let data: NonNull<UnsafeCell<Option<Y>>> = Box::leak(cell).into();
     let fut = fut(Yielder {
-        inner: inner.clone(),
+        cell: Cell { data },
     });
-    AsyncGen { inner, fut }
+
+    AsyncGen {
+        cell: Cell { data },
+        fut,
+    }
 }
 
-struct Inner<Y> {
-    data: UnsafeCell<Option<Y>>,
+struct Cell<Y> {
+    data: NonNull<UnsafeCell<Option<Y>>>,
 }
 
-unsafe impl<Y: Send> Send for Inner<Y> {}
-unsafe impl<Y: Send + Sync> Sync for Inner<Y> {}
+impl<Y> Cell<Y> {
+    #[inline]
+    fn data(&self) -> &UnsafeCell<Option<Y>> {
+        unsafe { self.data.as_ref() }
+    }
+}
+
+unsafe impl<Y: Send> Send for Cell<Y> {}
+unsafe impl<Y: Send + Sync> Sync for Cell<Y> {}
 
 /// The return value produced by an async coroutine.
 ///
@@ -61,10 +69,14 @@ pub struct Return<T = ()>(T);
 
 #[doc(hidden)]
 pub struct Yielder<Y = ()> {
-    inner: Arc<Inner<Y>>,
+    cell: Cell<Y>,
 }
 
 impl<Y> Yielder<Y> {
+    // pub fn data(&self) -> &Cell<Y> {
+
+    // }
+
     /// Same as `yield` keyword.
     ///
     /// It pauses execution and the value is returned to the generator's caller.
@@ -78,11 +90,11 @@ impl<Y> Yielder<Y> {
         //     y.return_(())
         // });
         unsafe {
-            *self.inner.data.get() = Some(val);
+            *self.cell.data().get() = Some(val);
         }
 
         poll_fn(|_| {
-            if unsafe { (*self.inner.data.get()).is_some() } {
+            if unsafe { (*self.cell.data().get()).is_some() } {
                 return Poll::Pending;
             }
             Poll::Ready(())
@@ -96,14 +108,19 @@ impl<Y> Yielder<Y> {
     }
 }
 
-pin_project! {
-    /// Represent an asyncronus generator. It implementations [`AsyncGenerator`] trait.
-    ///
-    /// This `struct` is created by [`gen()`]. See its documentation for more details.
-    pub struct AsyncGen<Fut, Y> {
-        inner: Arc<Inner<Y>>,
-        #[pin]
-        fut: Fut,
+/// Represent an asyncronus generator. It implementations [`AsyncGenerator`] trait.
+///
+/// This `struct` is created by [`gen()`]. See its documentation for more details.
+pub struct AsyncGen<Fut, Y> {
+    cell: Cell<Y>,
+    fut: Fut,
+}
+
+impl<Fut, Y> Drop for AsyncGen<Fut, Y> {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.cell.data.as_ptr()));
+        };
     }
 }
 
@@ -112,16 +129,15 @@ where
     Fut: Future<Output = Return<R>>,
 {
     /// See [`AsyncGenerator::poll_resume`] for more details.
-    #[doc(hidden)]
     pub fn poll_resume(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<GeneratorState<Y, R>> {
-        let me = self.project();
-        match me.fut.poll(cx) {
+        let me = unsafe { self.get_unchecked_mut() };
+        match unsafe { Pin::new_unchecked(&mut me.fut).poll(cx) } {
             Poll::Ready(Return(val)) => Poll::Ready(GeneratorState::Complete(val)),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    if let Some(val) = (*me.inner.data.get()).take() {
+                    if let Some(val) = (*me.cell.data().get()).take() {
                         return Poll::Ready(GeneratorState::Yielded(val));
                     }
                 }
@@ -151,14 +167,14 @@ where
 
     #[doc(hidden)]
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Y>> {
-        let me = self.project();
-        match me.fut.poll(cx) {
+        let me = unsafe { self.get_unchecked_mut() };
+        match unsafe { Pin::new_unchecked(&mut me.fut).poll(cx) } {
             Poll::Ready(Return(())) => Poll::Ready(None),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
                 unsafe {
-                    if let Some(val) = (*me.inner.data.get()).take() {
+                    if let Some(val) = (*me.cell.data().get()).take() {
                         return Poll::Ready(Some(val));
                     }
                 }
