@@ -7,7 +7,7 @@ mod types;
 
 pub use futures_core;
 
-pub use async_coroutine::{gen, AsyncGen, Yield};
+pub use async_coroutine::{gen, AsyncGen, Yielder};
 pub use async_iter::{async_iter_from, AsyncIter};
 pub use types::{AsyncGenerator, GeneratorState};
 
@@ -49,5 +49,5 @@ macro_rules! stream {
 
 #[doc(hidden)]
 pub mod __private {
-    pub use async_gen_macros::*;
+    pub use async_gen_macros::gen_inner;
 }

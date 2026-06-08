@@ -32,14 +32,14 @@ use crate::{AsyncGenerator, AsyncIter, GeneratorState};
 /// fn check_type_1(_: &AsyncGen<impl Future<Output = &'static str>, i32>) {}
 /// fn check_type_2(_: &impl AsyncGenerator<Yield = i32, Return = &'static str>) {}
 /// ```
-pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yield<Y>) -> Fut) -> AsyncGen<Fut, Y>
+pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yielder<Y>) -> Fut) -> AsyncGen<Fut, Y>
 where
     Fut: Future<Output = R>,
 {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
     });
-    let fut = fut(Yield {
+    let fut = fut(Yielder {
         inner: inner.clone(),
     });
     AsyncGen { inner, fut }
@@ -53,11 +53,11 @@ unsafe impl<Y: Send> Send for Inner<Y> {}
 unsafe impl<Y: Send + Sync> Sync for Inner<Y> {}
 
 #[doc(hidden)]
-pub struct Yield<Y = ()> {
+pub struct Yielder<Y = ()> {
     inner: Arc<Inner<Y>>,
 }
 
-impl<Y> Yield<Y> {
+impl<Y> Yielder<Y> {
     /// Same as `yield` keyword.
     ///
     /// It pauses execution and the value is returned to the generator's caller.
@@ -67,8 +67,7 @@ impl<Y> Yield<Y> {
         // And `Yield<()>` can't escape from this closure:
         //
         // gen(|y: Yield<()>| async {
-        //     // `y` can't escape from this closure. and owned by `async` body
-        //     y.return_(())
+        //     // `y` can't escape from this closure. and must owned by `async` body
         // });
         unsafe {
             *self.inner.data.get() = Some(val);
@@ -81,11 +80,6 @@ impl<Y> Yield<Y> {
             Poll::Ready(())
         })
         .await
-    }
-
-    #[inline]
-    pub fn return_<R>(self, v: R) -> R {
-        v
     }
 }
 
