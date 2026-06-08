@@ -7,7 +7,7 @@ mod types;
 
 pub use futures_core;
 
-pub use async_coroutine::{gen, AsyncGen, Yielder};
+pub use async_coroutine::{gen, AsyncGen, Return, Yielder};
 pub use async_iter::{async_iter_from, AsyncIter};
 pub use types::{AsyncGenerator, GeneratorState};
 

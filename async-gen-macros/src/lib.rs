@@ -12,7 +12,7 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
     let crate_path = crate_path.stream();
 
     let mut has_yielded = false;
-    let out = transform_yield_kw(tokens, &mut has_yielded);
+    let transformed_body = transform_yield_kw(tokens, &mut has_yielded);
 
     let mut o = TokenStream::new();
 
@@ -22,7 +22,7 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
         punct_join(':'),
         punct(':'),
         ident("gen"),
-        group(Delimiter::Parenthesis, |o| {
+        group('(', |o| {
             o.extend([punct('|'), ident("mut"), ident("_c")]);
 
             if !has_yielded {
@@ -31,19 +31,42 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
                 o.extend([punct_join(':'), punct(':'), ident("Yielder")]);
             }
 
-            o.extend([punct('|'), ident("async"), ident("move"), out]);
+            o.extend([
+                punct('|'),
+                ident("async"),
+                ident("move"),
+                group('{', |o| {
+                    o.extend([
+                        ident("let"),
+                        ident("v"),
+                        punct('='),
+                        ident("async"),
+                        transformed_body,
+                        punct('.'),
+                        ident("await"),
+                        punct(';'),
+                        // --------------
+                        ident("_c"),
+                        punct('.'),
+                        ident("return_"),
+                        group('(', |o| {
+                            o.push(ident("v"));
+                        }),
+                    ])
+                }),
+            ]);
         }),
     ]);
     o
 }
 
 fn transform_yield_kw(mut tokens: token_stream::IntoIter, has_yielded: &mut bool) -> TokenTree {
-    group(Delimiter::Brace, |o| {
+    group('{', |o| {
         while let Some(tt) = tokens.next() {
             match tt {
                 TokenTree::Ident(name) if name.to_string() == "yield" => {
                     *has_yielded = true;
-                    let expr = group(Delimiter::Parenthesis, |o| {
+                    let expr = group('(', |o| {
                         for tt in &mut tokens {
                             match tt {
                                 TokenTree::Punct(p) if p.as_char() == ';' => break,
@@ -51,7 +74,7 @@ fn transform_yield_kw(mut tokens: token_stream::IntoIter, has_yielded: &mut bool
                             }
                         }
                         if o.is_empty() {
-                            o.push(group(Delimiter::Parenthesis, |_| {}));
+                            o.push(group('(', |_| {}));
                         };
                     });
                     o.extend([

@@ -29,12 +29,12 @@ use crate::{AsyncGenerator, AsyncIter, GeneratorState};
 ///     check_type_1(&g);
 ///     check_type_2(&g);
 /// }
-/// fn check_type_1(_: &AsyncGen<impl Future<Output = &'static str>, i32>) {}
+/// fn check_type_1(_: &AsyncGen<impl Future<Output = Return<&'static str>>, i32>) {}
 /// fn check_type_2(_: &impl AsyncGenerator<Yield = i32, Return = &'static str>) {}
 /// ```
 pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yielder<Y>) -> Fut) -> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = R>,
+    Fut: Future<Output = Return<R>>,
 {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
@@ -52,6 +52,13 @@ struct Inner<Y> {
 unsafe impl<Y: Send> Send for Inner<Y> {}
 unsafe impl<Y: Send + Sync> Sync for Inner<Y> {}
 
+/// The return value produced by an async coroutine.
+///
+/// This wrapper insured that `Yielder` is owned by the `async` body of `gen` function.
+/// [`Yielder::return_`] is used to create this value.
+#[repr(transparent)]
+pub struct Return<T = ()>(T);
+
 #[doc(hidden)]
 pub struct Yielder<Y = ()> {
     inner: Arc<Inner<Y>>,
@@ -67,7 +74,8 @@ impl<Y> Yielder<Y> {
         // And `Yield<()>` can't escape from this closure:
         //
         // gen(|y: Yield<()>| async {
-        //     // `y` can't escape from this closure. and must owned by `async` body
+        //     // `y` can't escape from this closure. and owned by `async` body
+        //     y.return_(())
         // });
         unsafe {
             *self.inner.data.get() = Some(val);
@@ -80,6 +88,11 @@ impl<Y> Yielder<Y> {
             Poll::Ready(())
         })
         .await
+    }
+
+    #[inline]
+    pub fn return_<R>(self, v: R) -> Return<R> {
+        Return(v)
     }
 }
 
@@ -96,14 +109,14 @@ pin_project! {
 
 impl<Fut, Y, R> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = R>,
+    Fut: Future<Output = Return<R>>,
 {
     /// See [`AsyncGenerator::poll_resume`] for more details.
     #[doc(hidden)]
     pub fn poll_resume(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<GeneratorState<Y, R>> {
         let me = self.project();
         match me.fut.poll(cx) {
-            Poll::Ready(val) => Poll::Ready(GeneratorState::Complete(val)),
+            Poll::Ready(Return(val)) => Poll::Ready(GeneratorState::Complete(val)),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
@@ -126,7 +139,7 @@ where
 
 impl<Fut, Y> AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = ()>,
+    Fut: Future<Output = Return<()>>,
 {
     #[inline]
     /// Creates an async iterator from this generator.
@@ -140,7 +153,7 @@ where
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Y>> {
         let me = self.project();
         match me.fut.poll(cx) {
-            Poll::Ready(()) => Poll::Ready(None),
+            Poll::Ready(Return(())) => Poll::Ready(None),
             Poll::Pending => {
                 // SEAFTY: We just return from `me.fut`,
                 // So this is safe and unique access to `me.inner.data`
@@ -157,7 +170,7 @@ where
 
 impl<Fut, Y, R> AsyncGenerator for AsyncGen<Fut, Y>
 where
-    Fut: Future<Output = R>,
+    Fut: Future<Output = Return<R>>,
 {
     type Yield = Y;
     type Return = R;

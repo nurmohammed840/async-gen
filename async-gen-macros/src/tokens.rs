@@ -12,8 +12,17 @@ pub fn ident(name: &str) -> TokenTree {
     Ident::new(name, Span::call_site()).into()
 }
 
-pub fn group(delimiter: Delimiter, f: impl FnOnce(&mut TokenStream)) -> TokenTree {
+pub fn group(ch: char, f: impl FnOnce(&mut TokenStream)) -> TokenTree {
     let mut stream = TokenStream::new();
     f(&mut stream);
-    Group::new(delimiter, stream).into()
+    Group::new(
+        match ch {
+            '{' => Delimiter::Brace,
+            '[' => Delimiter::Bracket,
+            '(' => Delimiter::Parenthesis,
+            _ => Delimiter::None,
+        },
+        stream,
+    )
+    .into()
 }
