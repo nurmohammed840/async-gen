@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use futures_util::StreamExt;
 use std::pin::pin;
 
-const ITER: usize = 1000000;
+const ITER: usize = 10000;
 
 async fn async_gen_sum(iter: usize) -> usize {
     let mut gen = pin!(async_gen::gen! {
