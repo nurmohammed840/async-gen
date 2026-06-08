@@ -1,4 +1,4 @@
-use async_gen::{gen, GeneratorState};
+use async_gen::{gen, stream, GeneratorState};
 use futures::executor::block_on;
 use futures_core::Stream;
 use futures_util::stream::StreamExt;
@@ -42,7 +42,7 @@ fn yield_single_value() {
 #[test]
 fn fused() {
     block_on(async {
-        let s = pin!(gen! {
+        let s = pin!(stream! {
             yield "hello";
         });
         let mut s = s.fuse();
@@ -71,7 +71,7 @@ fn yield_multi_value() {
 fn return_stream() {
     block_on(async {
         fn build_stream() -> impl Stream<Item = i32> {
-            gen! {
+            stream! {
                 yield 1;
                 yield 2;
                 yield 3;
@@ -91,7 +91,7 @@ fn return_stream() {
 fn consume_channel() {
     block_on(async {
         let (tx, mut rx) = tokio::sync::mpsc::channel(10);
-        let mut s = pin!(gen! {
+        let mut s = pin!(stream! {
             while let Some(v) = rx.recv().await {
                 yield v;
             }
@@ -112,7 +112,7 @@ fn borrow_self() {
 
         impl Data {
             fn stream(&self) -> impl Stream<Item = &str> + '_ {
-                gen! {
+                stream! {
                     yield &self.0[..];
                 }
             }
@@ -127,8 +127,8 @@ fn borrow_self() {
 #[test]
 fn stream_in_stream() {
     block_on(async {
-        let s = gen! {
-            let mut s = pin!(gen! {
+        let s = stream! {
+            let mut s = pin!(stream! {
                 for i in 0..3 {
                     yield i;
                 }
@@ -145,7 +145,7 @@ fn stream_in_stream() {
 #[test]
 fn yield_non_unpin_value() {
     block_on(async {
-        let s: Vec<_> = gen! {
+        let s: Vec<_> = stream! {
             for i in 0..3 {
                 yield async move { i };
             }
@@ -163,7 +163,7 @@ fn unit_yield_in_select() {
     block_on(async {
         async fn do_stuff_async() {}
 
-        let s = gen! {
+        let s = stream! {
             tokio::select! {
                 _ = do_stuff_async() => { yield },
                 else => { yield },
@@ -180,7 +180,7 @@ fn yield_with_select() {
         async fn do_stuff_async() {}
         async fn more_async_work() {}
 
-        let s = gen! {
+        let s = stream! {
             tokio::select! {
                 _ = do_stuff_async() => { yield "hey" },
                 _ = more_async_work() => { yield "hey" },

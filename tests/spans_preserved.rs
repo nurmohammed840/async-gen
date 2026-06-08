@@ -1,12 +1,12 @@
 #![allow(clippy::never_loop)]
 
-use async_gen::gen;
+use async_gen::stream;
 use futures_util::stream::StreamExt;
 use std::pin::pin;
 
 #[tokio::test]
 async fn spans_preserved() {
-    let mut s = pin!(gen! {
+    let mut s = pin!(stream! {
         assert_eq!(line!(), 10);
     });
 

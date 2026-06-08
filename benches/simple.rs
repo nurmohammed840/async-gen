@@ -7,7 +7,7 @@ use std::pin::pin;
 const ITER: usize = 10000;
 
 async fn async_gen_sum(iter: usize) -> usize {
-    let mut gen = pin!(async_gen::gen! {
+    let mut gen = pin!(async_gen::stream! {
         for i in 1..=iter {
             yield i;
         }
