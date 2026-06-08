@@ -10,7 +10,7 @@ use crate::{AsyncGenerator, AsyncIter, GeneratorState};
 
 /// Creates a new generator, which implements the [`AsyncGenerator`] trait.
 ///
-/// Also see [`gen!`] macro for more details.
+/// Also see [`crate::gen!`] macro for more details.
 ///
 /// ## Examples
 ///
@@ -34,12 +34,11 @@ pub fn gen<Fut, Y, R>(fut: impl FnOnce(Yielder<Y>) -> Fut) -> AsyncGen<Fut, Y>
 where
     Fut: Future<Output = Return<R>>,
 {
-    let cell: Box<UnsafeCell<Option<Y>>> = Box::new(UnsafeCell::new(None));
-    let data: NonNull<UnsafeCell<Option<Y>>> = Box::leak(cell).into();
+    let cell = Box::new(UnsafeCell::new(None));
+    let data = Box::leak(cell).into();
     let fut = fut(Yielder {
         cell: Cell { data },
     });
-
     AsyncGen {
         cell: Cell { data },
         fut,
@@ -73,14 +72,10 @@ pub struct Yielder<Y = ()> {
 }
 
 impl<Y> Yielder<Y> {
-    // pub fn data(&self) -> &Cell<Y> {
-
-    // }
-
     /// Same as `yield` keyword.
     ///
     /// It pauses execution and the value is returned to the generator's caller.
-    pub async fn yield_(&mut self, val: Y) {
+    pub fn yield_(&mut self, val: Y) -> impl Future<Output = ()> + use<'_, Y> {
         // SEAFTY: this function is marked with `&mut self`
         //
         // And `Yield<()>` can't escape from this closure:
@@ -99,7 +94,6 @@ impl<Y> Yielder<Y> {
             }
             Poll::Ready(())
         })
-        .await
     }
 
     #[inline]
@@ -146,7 +140,6 @@ where
         }
     }
 
-    #[inline]
     /// See [`AsyncGenerator::poll_resume`] for more details.
     pub async fn resume(self: &mut Pin<&mut Self>) -> GeneratorState<Y, R> {
         poll_fn(|cx| self.as_mut().poll_resume(cx)).await
@@ -157,7 +150,6 @@ impl<Fut, Y> AsyncGen<Fut, Y>
 where
     Fut: Future<Output = Return<()>>,
 {
-    #[inline]
     /// Creates an async iterator from this generator.
     ///
     /// See [`AsyncIter`] for more details.
@@ -165,7 +157,7 @@ where
         AsyncIter::from(self)
     }
 
-    #[doc(hidden)]
+    /// See [`futures_core::Stream::poll_next`] for more details.
     pub fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Y>> {
         let me = unsafe { self.get_unchecked_mut() };
         match unsafe { Pin::new_unchecked(&mut me.fut).poll(cx) } {
@@ -191,7 +183,6 @@ where
     type Yield = Y;
     type Return = R;
 
-    #[inline]
     fn poll_resume(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
