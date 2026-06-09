@@ -11,7 +11,7 @@ Add it as a dependency to your Rust project by adding the following line to your
 
 ```toml
 [dependencies]
-async-gen = "0.2"
+async-gen = "0.3"
 ```
 
 # Examples

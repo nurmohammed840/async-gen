@@ -1,5 +1,5 @@
 use async_gen::{gen, stream, GeneratorState};
-use futures::{executor::block_on, future::FutureExt, SinkExt, Stream, StreamExt};
+use futures::{executor::block_on, future::FutureExt, select, SinkExt, Stream, StreamExt};
 use std::pin::pin;
 
 #[test]
@@ -62,6 +62,44 @@ fn yield_multi_value() {
         assert_eq!(s.resume().await, GeneratorState::Yielded("world"));
         assert_eq!(s.resume().await, GeneratorState::Yielded("dizzy"));
         assert_eq!(s.resume().await, GeneratorState::Complete(()));
+    })
+}
+
+#[test]
+fn unit_yield_in_select() {
+    block_on(async {
+        async fn do_stuff_async() {}
+
+        let s = stream! {
+            let mut fut = pin!(do_stuff_async().fuse());
+            select! {
+                _ = fut => { yield; },
+                complete => { yield; },
+            };
+        };
+        let values: Vec<_> = s.collect().await;
+        assert_eq!(values.len(), 1);
+    })
+}
+
+#[test]
+fn yield_with_select() {
+    block_on(async {
+        async fn do_stuff_async() {}
+        async fn more_async_work() {}
+
+        let s = stream! {
+            let mut fut1 = pin!(do_stuff_async().fuse());
+            let mut fut2 = pin!(more_async_work().fuse());
+
+            select! {
+                _ = fut1 => { yield "hey" },
+                _ = fut2 => { yield "hey" },
+                complete => { yield "hey" },
+            };
+        };
+        let values: Vec<_> = s.collect().await;
+        assert_eq!(values, vec!["hey"]);
     })
 }
 
@@ -153,44 +191,5 @@ fn yield_non_unpin_value() {
         .await;
 
         assert_eq!(s, vec![0, 1, 2]);
-    })
-}
-
-#[test]
-fn unit_yield_in_select() {
-    block_on(async {
-        async fn do_stuff_async() {}
-
-        let s = stream! {
-            let mut fut = pin!(do_stuff_async().fuse());
-            futures::select! {
-                _ = fut => { yield; },
-                complete => { yield; },
-            };
-        };
-        let values: Vec<_> = s.collect().await;
-        assert_eq!(values.len(), 1);
-    })
-}
-
-#[test]
-fn yield_with_select() {
-    block_on(async {
-        async fn do_stuff_async() {}
-        async fn more_async_work() {}
-
-        let s = stream! {
-            // 1. Store, fuse, and heap-pin both futures
-            let mut fut1 = pin!(do_stuff_async().fuse());
-            let mut fut2 = pin!(more_async_work().fuse());
-
-            futures::select! {
-                _ = fut1 => { yield "hey" },
-                _ = fut2 => { yield "hey" },
-                complete => { yield "hey" },
-            };
-        };
-        let values: Vec<_> = s.collect().await;
-        assert_eq!(values, vec!["hey"]);
     })
 }

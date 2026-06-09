@@ -16,7 +16,7 @@ pub fn gen_inner(input: TokenStream) -> TokenStream {
 
     let mut o = TokenStream::new();
 
-    // #crate_path ::gen(|mut _c| async move #out )
+    // #crate_path ::gen(|mut _c| async move { let v = async #transformed_body .await; _c.return_(v) } )
     o.extend(crate_path.clone());
     o.extend([
         punct_join(':'),
@@ -101,7 +101,6 @@ trait TokenStreamExt {
 }
 
 impl TokenStreamExt for TokenStream {
-    #[inline]
     fn push(&mut self, tt: TokenTree) {
         self.extend(Some(tt));
     }
